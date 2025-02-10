@@ -174,7 +174,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
         }
         else
             strcpy(cgiargs, ""); // line:netp:parseuri:endextract
-        strcpy(filename, ".");   // line:netp:parseuri:beginconvert2
+        strcpy(filename, "..");   // line:netp:parseuri:beginconvert2
         strcat(filename, uri);   // line:netp:parseuri:endconvert2
         return 0;
     }
