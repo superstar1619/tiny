@@ -7,6 +7,10 @@
  *   - Fixed sprintf() aliasing issue in serve_static(), and clienterror().
  */
 #include "csapp.h"
+#include "sbuf.h"
+
+#define NTHREADS  4
+#define SBUFSIZE  16
 
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
@@ -16,13 +20,17 @@ void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum,
                  char *shortmsg, char *longmsg);
+void *thread(void *vargp);
+
+sbuf_t sbuf;
 
 int main(int argc, char **argv)
 {
-    int listenfd, connfd;
+    int i,listenfd, connfd;
     char hostname[MAXLINE], port[MAXLINE];
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
+    pthread_t tid[NTHREADS];
 
     /* Check command line args */
     if (argc != 2)
@@ -32,6 +40,10 @@ int main(int argc, char **argv)
     }
     
     listenfd = Open_listenfd(argv[1]);
+    sbuf_init(&sbuf,SBUFSIZE);
+    for(i=0;i<NTHREADS;i++)
+        Pthread_create(&tid[i],NULL,thread,NULL);
+
     while (1)
     {
         clientlen = sizeof(clientaddr);
@@ -39,6 +51,16 @@ int main(int argc, char **argv)
         Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE,
                     port, MAXLINE, 0);
         printf("Accepted connection from (%s, %s)\n", hostname, port);
+        sbuf_insert(&sbuf,connfd);
+    }
+}
+
+void *thread(void *vargp)
+{
+    Pthread_detach(pthread_self());
+    while(1)
+    {
+        int connfd=sbuf_remove(&sbuf);
         doit(connfd);  // line:netp:tiny:doit
         Close(connfd); // line:netp:tiny:close
     }
@@ -134,9 +156,11 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
     if (!strstr(uri, "cgi-bin"))
     { /* Static content */                 // line:netp:parseuri:isstatic
         strcpy(cgiargs, "");               // line:netp:parseuri:clearcgi
-        strcpy(filename, ".");             // line:netp:parseuri:beginconvert1
+        strcpy(filename, "../httpd");             // line:netp:parseuri:beginconvert1
         strcat(filename, uri);             // line:netp:parseuri:endconvert1
-        if (uri[strlen(uri) - 1] == '/')   // line:netp:parseuri:slashcheck
+        if(strchr(uri,'.')==NULL)
+            strcat(filename, "/");
+        if (filename[strlen(filename) - 1] == '/')   // line:netp:parseuri:slashcheck
             strcat(filename, "home.html"); // line:netp:parseuri:appenddefault
         return 1;
     }
